@@ -14,6 +14,8 @@
 	let showOutlineA = true
 	let showOutlineB = true
 
+	let sdf = false
+
 	function setDivisions(val) {
 		const shrink = val < divisions
 		const oldRow = (step % divisions) / divisions
@@ -162,14 +164,55 @@
 			lerped: {north, south, east, west},
 		}
 	}
+
+	function sampleSquareSDF(func, {x,y,width, height}) {
+		const v1 = func(x,y)
+		const v2 = func(x+width,y)
+		const v3 = func(x+width,y+height)
+		const v4 = func(x,y+height)
+		
+		const hit1 = v1 <= 0
+		const hit2 = v2 <= 0
+		const hit3 = v3 <= 0
+		const hit4 = v4 <= 0
+
+		
+		const isoValue = (hit1?1:0) * 8 + (hit2?1:0) * 4 + (hit3?1:0) * 2 + (hit4?1:0) * 1
+		
+
+		const hitCenter = (isoValue === 5 || isoValue === 10) && func(x+width/2,y+height/2) <= 0
+
+		const northLerp = (v1)/(v1-v2) || 0
+		const southLerp = (v4)/(v4-v3) || 0
+		const eastLerp = (v2)/(v2-v3) || 0
+		const westLerp = (v1)/(v1-v4) || 0
+		
+		const north = {y: y, x: lerp(northLerp, x, x+width)}
+		const south = {y: y+height, x: lerp(southLerp, x, x+width)}
+		const east = {y: lerp(eastLerp, y, y+height), x: x+width}
+		const west = {y: lerp(westLerp, y, y+height), x: x}
+		
+		
+		return {
+			shapes: isoShapes(isoValue, hitCenter, north, east, south, west),
+			outlines: isoOutlines(isoValue, hitCenter, north, east, south, west),
+			hits: [hit1, hit2, hit3, hit4],
+			isoValue: isoValue,
+			lerped: {north, south, east, west},
+		}
+	}
 	
 	const translate = (dx,dy, shape) => {
 		return (x,y) => shape(x-dx, y-dy)
 	}
 	
-	const circle = (r) => {
+	const circleClassic = (r) => {
 		const r2 = r*r
 		return (x,y) => r2/((x)*(x)+(y)*(y))
+	}
+	
+	const circleSDF = (r) => {
+		return (x,y) => Math.sqrt((x)*(x)+(y)*(y)) - r
 	}
 	
 	const add = (s1, s2) => {
@@ -190,8 +233,12 @@
 	const addOffset = (o, shape) => {
 		return (x,y) => shape(x,y) + o
 	}
+
+	$: combineShapes = sdf ? min : add
+
+	$: circle = sdf ? circleSDF : circleClassic
 	
-	$: func = addOffset(offset, add(
+	$: func = addOffset((sdf?offset:-offset/100), combineShapes(
 		translate(dx, dy, circle(radius)),
 		translate(dxB, dyB, circle(radiusB))
 	))
@@ -207,7 +254,7 @@
 		active:  i==step,
 	})).map((square) => ({
 		...square,
-		result: sampleSquare(func, square),
+		result: sdf ? sampleSquareSDF(func, square) : sampleSquare(func, square),
 	}))
 	
 	function jumpToStep(evt) {
@@ -220,23 +267,28 @@
 
 <style>
 
+	fieldset {
+		margin:  0;
+	}
+
 	svg {
-		max-width: 80vmin;
-		max-height: 80vmin;
 		display: block;
 		border: 1px solid gray;
 		flex-grow: 1;
+		flex-shrink: 1;
+		flex-basis: 30em;
 	}
 	
 	input {
 		margin: 0;
 		padding: 0.2em 0;
+		flex-grow: 1;
 	}
 	
 	dl {
 		margin: 0;
 		display: grid;
-		grid-template-columns: repeat(3, max-content);
+		grid-template-columns: max-content auto max-content;
 		align-items: center;
 		gap: 0.5em 1em;
 		padding: 0.5em;
@@ -247,39 +299,59 @@
 	}
 	
 	dd {
-		margin: 0
+		margin: 0;
+		display: flex;
 	}
 	
 	h1 {
 		margin: 0;
 	}
 	
+	.intro {
+
+	}
 
 	.container {
+		max-width: 60em;
+		margin: auto;
 		display: flex;
 		flex-wrap: wrap;
 		gap: 1em;
+		padding-bottom: 3em;
+	}
+	.controls {
+		flex-grow: 1;
+		flex-basis: 10em;
+	}
+
+	.check-row {
+		display: flex;
+		gap: 1em;
+		grid-column: span 2;
 	}
 </style>
 
-<h1>
-	Marching Squares
-</h1>
-
-<p>
-	Above you can see how an implicit function describing two circles is converted into a polygon moving a square across the shape and sampling the 4 vertices in each step. Each corner of the square can be either inside or outside of the circles (16 possible cases, labeled by the iso numbers). Each possible case results in a specific edge being created or not.
-</p>
-<p>
-	The Divisions slider controls the size of the square and by this the number of steps and the resulting resolution.
-</p>
-<p>
-The Step slider highlights the square position in a specified step. The squares corners are marked as being inside (green) or outside (red) the target shape. The orange dots show the linear interpolated intersection points of the square&apos;s edges and the target shape.
-</p>
-<p>
-	The target shape consists of two circles. They can be moved and resized via the Shape sliders.
-</p>
 
 <div class="container">
+
+	<div class="intro">
+		<h1>
+			Marching Squares
+		</h1>
+
+		<p>
+			Above you can see how an implicit function describing two circles is converted into a polygon moving a square across the shape and sampling the 4 vertices in each step. Each corner of the square can be either inside or outside of the circles (16 possible cases, labeled by the iso numbers). Each possible case results in a specific edge being created or not.
+		</p>
+		<p>
+			The Divisions slider controls the size of the square and by this the number of steps and the resulting resolution.
+		</p>
+		<p>
+		The Step slider highlights the square position in a specified step. The squares corners are marked as being inside (green) or outside (red) the target shape. The orange dots show the linear interpolated intersection points of the square&apos;s edges and the target shape.
+		</p>
+		<p>
+			The target shape consists of two circles. They can be moved and resized via the Shape sliders.
+		</p>
+	</div>
 
 	<div class="controls">
 		<fieldset>
@@ -288,6 +360,14 @@ The Step slider highlights the square position in a specified step. The squares 
 			</legend>
 			
 			<dl>
+
+				<dt><label for="type">Function Type</label></dt>
+			<dd class="check-row">
+				<label><input type="radio" bind:group={sdf} value={false}> Inverse Distance</label>
+				<label><input type="radio" bind:group={sdf} value={true}> SDF</label>
+		</dd>
+
+
 			<dt><label for="divisions">Divisions</label></dt>
 			<dd><input id="divisions" type="range" min={4} max={50} value={divisions} step="1" on:input={(evt) => setDivisions(evt.currentTarget.valueAsNumber)} />
 		</dd>
@@ -299,12 +379,12 @@ The Step slider highlights the square position in a specified step. The squares 
 			<dd><output>{step}</output></dd>
 				
 			<dt><label for="step">Offset</label></dt>
-			<dd><input id="step" type="range" min={-1} step={0.1} max={0.5} bind:value={offset} />
+			<dd><input id="step" type="range" min={-50} step={1} max={50} bind:value={offset} />
 		</dd>
 			<dd><output>{offset}</output></dd>
 				
 			<dt></dt>
-			<dd style="grid-column: span 2">
+			<dd class="check-row">
 				<label><input type="checkbox" bind:checked={showIso} /> Show Iso Numbers</label>
 			</dd>
 			</dl>
@@ -331,7 +411,7 @@ The Step slider highlights the square position in a specified step. The squares 
 		</dd>
 			<dd><output>{radius}</output></dd>
 			<dt></dt>
-			<dd style="grid-column: span 2">
+			<dd class="check-row">
 				<label><input type="checkbox" bind:checked={showOutlineA} /> Show outline</label>
 			</dd>
 		</dl>
@@ -359,7 +439,7 @@ The Step slider highlights the square position in a specified step. The squares 
 		</dd>
 			<dd><output>{radiusB}</output></dd>
 			<dt></dt>
-			<dd style="grid-column: span 2">
+			<dd class="check-row">
 				<label><input type="checkbox" bind:checked={showOutlineB} /> Show outline</label>
 			</dd>
 		</dl>
