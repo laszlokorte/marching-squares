@@ -288,7 +288,7 @@
 	dl {
 		margin: 0;
 		display: grid;
-		grid-template-columns: max-content auto max-content;
+		grid-template-columns: max-content auto 4em;
 		align-items: center;
 		gap: 0.5em 1em;
 		padding: 0.5em;
@@ -322,12 +322,21 @@
 	.controls {
 		flex-grow: 1;
 		flex-basis: 10em;
+		gap: 1em;
+		display: flex;
+		flex-direction: column;
 	}
 
 	.check-row {
 		display: flex;
 		gap: 1em;
 		grid-column: span 2;
+	}
+
+	legend {
+		background-color: #333;
+		color: #fff;
+		padding: 0.3em;
 	}
 </style>
 
